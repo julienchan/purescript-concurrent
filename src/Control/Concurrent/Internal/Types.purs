@@ -1,12 +1,14 @@
 module Control.Concurrent.Internal.Types
     ( IO
-    , ASYNC
+    , ALL
     , launchIO
+    , unsafeLaunchIO
     , delay
     , bracket
     , attempt
     , ParIO(..)
     , makeIO
+    , Canceler
     , nonCanceler
     , Thread(..) ) where
 
@@ -17,6 +19,7 @@ import Control.Alternative (class Alternative)
 import Control.Apply (lift2)
 import Control.Monad.Eff (Eff, kind Effect)
 import Control.Monad.Eff.Class (class MonadEff, liftEff)
+import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Eff.Exception (Error, error)
 import Control.Monad.Eff.Ref (newRef, readRef, writeRef)
 import Control.Monad.Eff.Ref.Unsafe (unsafeRunRef)
@@ -36,20 +39,19 @@ import Data.Newtype (class Newtype)
 import Data.Time.Duration (Milliseconds(..))
 
 import Partial.Unsafe (unsafeCrashWith)
-import Unsafe.Coerce (unsafeCoerce)
 
 
 -- | The IO monad
 foreign import data IO :: Type -> Type
 
 -- | Parallel IO
-newtype ParIO = ParIO (IO a)
+newtype ParIO a = ParIO (IO a)
 
 -- | Canceler
 newtype Canceler = Canceler (Error -> IO Unit)
 
 -- | Async effect
-foreign import data ASYNC :: Effect
+foreign import data ALL :: Effect
 
 newtype Thread a = Thread
   { kill :: Error -> IO Unit
@@ -64,8 +66,11 @@ nonCanceler = Canceler k
 delay :: Milliseconds -> IO Unit
 delay (Milliseconds n) = Fn.runFn2 _delay Right n
 
-launchIO :: forall eff a. IO a -> Eff (async :: ASYNC | eff) (Thread a)
+launchIO :: forall a. IO a -> Eff (all :: ALL) (Thread a)
 launchIO ft = Fn.runFn6 _launchIO isLeft unsafeFromLeft unsafeFromRight Left Right ft
+
+unsafeLaunchIO :: forall eff a. IO a -> Eff eff (Thread a)
+unsafeLaunchIO ft = unsafeCoerceEff (launchIO ft)
 
 bracket :: forall a b. IO a -> (a -> IO Unit) -> (a -> IO b) -> IO b
 bracket acquire release kleisli = Fn.runFn3 _bracket acquire release kleisli
@@ -150,7 +155,7 @@ instance semigroupParIO :: Semigroup a => Semigroup (ParIO a) where
     append = lift2 append
 
 instance monoidParFuture :: Monoid a => Monoid (ParIO a) where
-    empty = pure mempty
+    mempty = pure mempty
 
 instance altParIO :: Alt ParIO where
     alt (ParIO a1) (ParIO a2) = ParIO (makeIO go)
@@ -195,7 +200,7 @@ foreign import _throwError :: forall a. Error -> IO a
 foreign import _liftEff :: forall eff a. Eff eff a -> IO a
 
 -- | attempt computation of an IO
-foreign import attempt :: forall a. IO a -> IO (IO Error a)
+foreign import attempt :: forall a. IO a -> IO (Either Error a)
 
 foreign import _bracket :: forall a b. Fn.Fn3 (IO a) (a -> IO Unit) (a -> IO b) (IO b)
 
@@ -204,7 +209,7 @@ foreign import makeIO :: forall eff a. ((Either Error a -> Eff eff Unit) -> Eff 
 foreign import _delay :: forall a. Fn.Fn2 (Unit -> Either a Unit) Number (IO Unit)
 
 foreign import _launchIO
-  :: forall eff a
+  :: forall a
   . Fn.Fn6
       (Either Error a -> Boolean)
       (Either Error a -> Error)
@@ -212,7 +217,7 @@ foreign import _launchIO
       (Error -> Either Error a)
       (a -> Either Error a)
       (IO a)
-      (Eff (async :: ASYNC | eff) (Thread a))
+      (Eff (all :: ALL) (Thread a))
 
 unsafeFromLeft :: forall x y. Either x y -> x
 unsafeFromLeft = case _ of

@@ -166,13 +166,180 @@ function _wakeupWaiter(mv, val, right) {
   if (mv.waiters > 0) {
     var l = mv.waiters, value = right(val)
     for (var i = 0; i < l; i++) {
-      mv[i].cb(value)
+      runEff(mv[i].cb(value))
       mv[i] = undefined
     }
     mv.waiters = 0
   }
 }
 
-exports.makeEmptyVar = function () {
+function notifyMVarFull(mv, val, right) {
+  _wakeupWaiter(mv, val, right)
+  var reader = mv.readers.dequeue()
+  if (reader) {
+    if (_isMVarFull(mv)) {
+      _unsetMVarFull(mv)
+    }
+    _setMVarEmpty(mv)
+    runEff(reader.cb(right(val)))
+  } else {
+    if (_isMVarEmpty(mv)) {
+      _unsetMVarEmpty(mv)
+    }
+    _setMVarValue(mv, val)
+  }
+}
+
+function notifyMVarEmpty(mv, right) {
+  var writer = mv.writers.dequeue()
+  if (writer) {
+    if (_isMVarEmpty(mv)) {
+      _unsetMVarEmpty(mv)
+    }
+    _setMVarValue(mv, writer.value)
+    runEff(writer.cb(right(void 0)))
+  } else {
+    if (_isMVarFull(mv)) {
+      _unsetMVarFull(mv)
+    }
+    _setMVarEmpty(mv)
+  }
+}
+
+exports._makeEmptyMVar = function () {
   return new MVar()
+}
+
+exports._makeMVar = function (val) {
+  return function () {
+    var mv = new MVar()
+    _unsetMVarEmpty(mv)
+    _setMVarValue(mv, val)
+    return mv
+  }
+}
+
+exports._takeMVar = function (left, right, noncaller, mv, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+    } else if (_isMVarFull(mv)) {
+      runEff(cb(right(mv.val)))
+      notifyMVarEmpty(mv, right)
+    } else {
+      mv.readers.enqueue(createEffRec(cb))
+    }
+    return noncaller
+  }
+}
+
+exports._tryTakeMVar = function (nothing, just, left, right, noncaller, mv, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+    } else if (_isMVarFull(mv)) {
+      runEff(cb(right(just(mv.val))))
+      notifyMVarEmpty(mv, right)
+    } else {
+      runEff(cb(right(nothing)))
+    }
+    return noncaller
+  }
+}
+
+exports._readMVar = function (left, right, noncaller, mv, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+    } else if (_isMVarFull(mv)) {
+      runEff(cb(right(mv.val)))
+    } else {
+      _queueWaiter(createEffRec(cb), mv)
+    }
+    return noncaller
+  }
+}
+
+exports._putMVar = function (left, right, noncaller, mv, val, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+    } else if (_isMVarFull(mv)) {
+      mv.writers.enqueue(createWriter(cb, val))
+    } else {
+      notifyMVarFull(mv, val, right)
+      runEff(cb(right(void 0)))
+    }
+    return noncaller
+  }
+}
+
+exports._tryPutMVar = function (left, right, noncaller, mv, val, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+    } else if (_isMVarFull(mv)) {
+      runEff(cb(right(false)))
+    } else {
+      notifyMVarFull(mv, val, right)
+      runEff(cb(right(true)))
+    }
+    return noncaller
+  }
+}
+
+exports._killMVar = function (left, right, nonCanceler, mv, err, cb) {
+  return function () {
+    if (_isMVarKilled(mv)) {
+      runEff(cb(left(mv.val)))
+      return noncaller
+    } else {
+      var readers = mv.readers, writers = mv.writers, waiters = mv.waiters, mverr = left(err)
+      if (waiters > 0) {
+        for (var i = 0, wl = waiters; i < wl; i++) {
+          runEff(mv[i].cb(mverr))
+          mv[i] = undefined
+        }
+        mv.waiters = 0
+      }
+      // readers
+      if (readers) {
+        for (var _iterator = readers.iter(), _step, item; !(_step = _iterator.next()).done; ) {
+          runEff(_step.value.cb(mverr))
+        }
+        mv.reader = undefined
+      }
+      // writers
+      if (writers) {
+        for (var _iterator = writers.iter(), _step, item; !(_step = _iterator.next()).done; ) {
+          runEff(_step.value.cb(mverr))
+        }
+        mv.writer = undefined
+      }
+      _setMVarKilled(mv, err)
+      runEff(cb(right(void 0)))
+      return noncaller
+    }
+  }
+}
+
+function runEff(eff) {
+  try {
+    eff()
+  } catch (err) {
+    _nextTick(function () {
+      throw err
+    })
+  }
+}
+
+function _nextTick(cb) {
+  // first check if this Node, if it use process next tick
+  if ({}.toString.call(process) === "[object process]") {
+    process.nextTick(cb)
+  } else if (typeof setImmediate === 'function') {
+    setImmediate(cb)
+  } else {
+    setTimeout(cb, 0)
+  }
 }
