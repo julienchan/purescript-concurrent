@@ -68,22 +68,22 @@ exports._bracket = function (acquire, release, k) {
   return new IO(BRACKET, acquire, release, k)
 }
 
-function _setDelay(n, k) {
-  // check if 'setImmediate present'
-  if (n <= 0 && typeof setImmediate !== "undefined") {
-    return setImmediate(k)
-  }
-  return setTimeout(k, n)
-}
-
-function _clearDelay(n, k) {
-  if (n <= 0 && typeof clearImmediate !== "undefined") {
-    return clearImmediate(k)
-  }
-  return clearTimeout(k)
-}
-
 exports._delay = function () {
+  function _setDelay(n, k) {
+    // check if 'setImmediate present'
+    if (n <= 0 && typeof setImmediate !== "undefined") {
+      return setImmediate(k)
+    }
+    return setTimeout(k, n)
+  }
+
+  function _clearDelay(n, k) {
+    if (n <= 0 && typeof clearImmediate !== "undefined") {
+      return clearImmediate(k)
+    }
+    return clearTimeout(k)
+  }
+
   return function (right, ms) {
     return new IO(ASYNC, function (cb) {
       return function () {
@@ -96,7 +96,7 @@ exports._delay = function () {
       }
     })
   }
-}
+}()
 
 function _nextTick(cb) {
   // first check if this Node, if it use process next tick

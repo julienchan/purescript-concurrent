@@ -8,7 +8,7 @@ module Control.Concurrent.Internal.Types
     , attempt
     , ParIO(..)
     , makeIO
-    , Canceler
+    , Canceler(..)
     , nonCanceler
     , Thread(..) ) where
 
@@ -41,7 +41,8 @@ import Data.Time.Duration (Milliseconds(..))
 import Partial.Unsafe (unsafeCrashWith)
 
 
--- | The IO monad
+-- | The IO monad, we don't use any effect row because it added more pain to manage
+-- | and it doesn't have any algebraic basis.
 foreign import data IO :: Type -> Type
 
 -- | Parallel IO
@@ -50,7 +51,7 @@ newtype ParIO a = ParIO (IO a)
 -- | Canceler
 newtype Canceler = Canceler (Error -> IO Unit)
 
--- | Async effect
+-- | Represent All possible effect
 foreign import data ALL :: Effect
 
 newtype Thread a = Thread
@@ -66,6 +67,7 @@ nonCanceler = Canceler k
 delay :: Milliseconds -> IO Unit
 delay (Milliseconds n) = Fn.runFn2 _delay Right n
 
+-- | Convert an IO to Eff monad
 launchIO :: forall a. IO a -> Eff (all :: ALL) (Thread a)
 launchIO ft = Fn.runFn6 _launchIO isLeft unsafeFromLeft unsafeFromRight Left Right ft
 
@@ -165,7 +167,7 @@ instance altParIO :: Alt ParIO where
             Thread t1 <- launchIO a1
             Thread t2 <- launchIO a2
             let
-              earlyError = error "Alt ParAff: early exit"
+              earlyError = error "Alt ParIO: early exit"
               runK t r = do
                 res <- liftEff $ unsafeRunRef $ readRef ref
                 case res, r of
@@ -186,7 +188,7 @@ instance plusParIO :: Plus ParIO where
 
 instance alternativeParIO :: Alternative ParIO
 
-instance parallellIO :: Parallel ParIO IO where
+instance parallelIO :: Parallel ParIO IO where
     parallel = ParIO
     sequential (ParIO io) = io
 

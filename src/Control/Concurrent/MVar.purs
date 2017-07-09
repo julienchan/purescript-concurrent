@@ -1,4 +1,18 @@
-module Control.Concurrent.Internal.MVar where
+module Control.Concurrent.MVar
+    ( MVar
+    , withMVar
+    , makeEmptyMVar
+    , makeMVar
+    , putMVar
+    , tryPutMVar
+    , takeMVar
+    , tryTakeMVar
+    , readMVar
+    , swapMVar
+    , modifyMVar
+    , modifyMVar'
+    , killMVar
+    ) where
 
 import Prelude
 
@@ -13,13 +27,18 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Data.Function.Uncurried (Fn5, Fn6, Fn7, runFn5, runFn6, runFn7)
 
+-- | An `MVar` is a synchronising variable, used for communication between concurrent threads.
+-- | It can be thought of as a a box, which may be empty or full. By ```threads``` here
+-- | is thread created when you ```fork``` an IO monad.
 foreign import data MVar :: Type -> Type
 
+-- | 'withMVar' is an exception-safe wrapper for operating on the contents
+-- | of an 'MVar'.
 withMVar :: forall a b. MVar a -> (a -> IO b) -> IO b
 withMVar v act = do
-  a <- takeMVar v
-  b <- act a `catchError` \e -> putMVar v a *> throwError e
-  putMVar v a *> pure b
+    a <- takeMVar v
+    b <- act a `catchError` \e -> putMVar v a *> throwError e
+    putMVar v a *> pure b
 
 makeEmptyMVar :: forall a. IO (MVar a)
 makeEmptyMVar = liftEff _makeEmptyMVar
@@ -44,21 +63,21 @@ readMVar mv = makeIO (\cb -> runFn5 _readMVar Left Right nonCanceler mv cb)
 
 swapMVar :: forall a. MVar a -> a -> IO a
 swapMVar mv new = do
-  old <- takeMVar mv
-  _ <- putMVar mv new
-  pure old
+    old <- takeMVar mv
+    _ <- putMVar mv new
+    pure old
 
 modifyMVar :: forall a b. MVar a -> (a -> IO (Tuple a b)) -> IO b
 modifyMVar v io = do
-  a <- takeMVar v
-  Tuple a' b <- io a `catchError` \e -> putMVar v a *> throwError e
-  putMVar v a' *> pure b
+    a <- takeMVar v
+    Tuple a' b <- io a `catchError` \e -> putMVar v a *> throwError e
+    putMVar v a' *> pure b
 
 modifyMVar' :: forall a. MVar a -> (a -> IO a) -> IO Unit
 modifyMVar' mv io = do
-  a <- takeMVar mv
-  a' <- io a `catchError` \e -> putMVar mv a *> throwError e
-  putMVar mv a'
+    a <- takeMVar mv
+    a' <- io a `catchError` \e -> putMVar mv a *> throwError e
+    putMVar mv a'
 
 killMVar :: forall a. MVar a -> Error -> IO Unit
 killMVar mv err = makeIO (\cb -> runFn6 _killMVar Left Right nonCanceler mv err cb)
