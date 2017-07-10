@@ -169,11 +169,12 @@ instance altParIO :: Alt ParIO where
             let
               earlyError = error "Alt ParIO: early exit"
               runK t r = do
-                res <- liftEff $ unsafeRunRef $ readRef ref
+                res <- liftEff $ readRef ref
                 case res, r of
-                    Nothing, Left _  -> liftEff $ unsafeRunRef $ writeRef ref (Just r)
+                    Nothing, Left _  -> liftEff $ writeRef ref (Just r)
                     Nothing, Right _ -> t.kill earlyError *> liftEff (k r)
-                    Just r', _       -> t.kill earlyError *> liftEff (k r')
+                    Just r', Left _  -> t.kill earlyError *> liftEff (k r') -- both error
+                    Just _, Right _  -> t.kill earlyError *> liftEff (k r)
             Thread t3 <- launchIO $ runK t2 =<< attempt t1.join
             Thread t4 <- launchIO $ runK t1 =<< attempt t2.join
             pure $ Canceler \err -> parSequence_

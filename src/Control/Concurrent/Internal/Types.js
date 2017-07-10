@@ -71,14 +71,14 @@ exports._bracket = function (acquire, release, k) {
 exports._delay = function () {
   function _setDelay(n, k) {
     // check if 'setImmediate present'
-    if (n <= 0 && typeof setImmediate !== "undefined") {
+    if (n <= 4 && typeof setImmediate !== "undefined") {
       return setImmediate(k)
     }
     return setTimeout(k, n)
   }
 
   function _clearDelay(n, k) {
-    if (n <= 0 && typeof clearImmediate !== "undefined") {
+    if (n <= 4 && typeof clearImmediate !== "undefined") {
       return clearImmediate(k)
     }
     return clearTimeout(k)

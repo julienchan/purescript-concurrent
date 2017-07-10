@@ -1,8 +1,11 @@
-module Test.Main where
+module Test.Main
+    ( main
+    ) where
 
 import Prelude
 
 import Control.Alt ((<|>))
+import Control.Concurrent.MVar (makeEmptyMVar, putMVar, takeMVar, readMVar)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.Exception (Error, EXCEPTION, throwException, error)
@@ -23,6 +26,16 @@ import Data.Time.Duration (Milliseconds(..))
 import Test.Assert (assert', ASSERT)
 
 type TestEff = Eff (assert :: ASSERT, console :: CONSOLE, exception :: EXCEPTION)
+
+timeout :: Milliseconds -> IO Unit -> IO Unit
+timeout ms io = do
+    exn <- makeEmptyMVar
+    t1 <- forkIO (delay ms *> putMVar exn (Just "Timed out"))
+    t2 <- forkIO (io *> putMVar exn Nothing)
+    res <- takeMVar exn
+    case res of
+        Nothing -> void $ killThread (error "Done") t1
+        Just e  -> void $ killThread (error "Done") t2 *> throwError (error e)
 
 assertEff
     :: String
@@ -193,6 +206,18 @@ test_parallel_choose_success = assert "parallel/error multi" do
         parallel (delay (Milliseconds 200.0) $> 50)
     pure (n == 50)
 
+test_putTakeMVar :: IO Unit
+test_putTakeMVar = timeout (Milliseconds 1000.0) $ assert "putTakeMVar" do
+    v <- makeEmptyMVar
+    _ <- forkIO (delay (Milliseconds 0.0) *> putMVar v 1.0)
+    eq 1.0 <$> takeMVar v
+
+test_readMVar :: IO Unit
+test_readMVar = timeout (Milliseconds 1000.0) $ assert "readMVar" do
+    v <- makeEmptyMVar
+    _ <- forkIO (delay (Milliseconds 10.0) *> putMVar v 42)
+    eq <$> readMVar v <*> takeMVar v
+
 main :: Eff (all :: ALL) Unit
 main = do
     test_pure
@@ -213,4 +238,6 @@ main = do
         , test_parallel
         , test_parallel_error
         , test_parallel_choose_success
+        , test_putTakeMVar
+        , test_readMVar
         ]

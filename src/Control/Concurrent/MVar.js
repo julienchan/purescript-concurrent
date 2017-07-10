@@ -233,17 +233,17 @@ exports._takeMVar = function (left, right, noncaller, mv, cb) {
   }
 }
 
-exports._tryTakeMVar = function (nothing, just, left, right, noncaller, mv, cb) {
+exports._tryTakeMVar = function (nothing, just, right, mv) {
   return function () {
+    var value = mv.val
     if (_isMVarKilled(mv)) {
-      runEff(cb(left(mv.val)))
+      throw value
     } else if (_isMVarFull(mv)) {
-      runEff(cb(right(just(mv.val))))
       notifyMVarEmpty(mv, right)
+      return just(value)
     } else {
-      runEff(cb(right(nothing)))
+      return nothing
     }
-    return noncaller
   }
 }
 
@@ -268,31 +268,29 @@ exports._putMVar = function (left, right, noncaller, mv, val, cb) {
       mv.writers.enqueue(createWriter(cb, val))
     } else {
       notifyMVarFull(mv, val, right)
-      runEff(cb(right(void 0)))
+      runEff(cb(right()))
     }
     return noncaller
   }
 }
 
-exports._tryPutMVar = function (left, right, noncaller, mv, val, cb) {
+exports._tryPutMVar = function (right, mv, val) {
   return function () {
     if (_isMVarKilled(mv)) {
-      runEff(cb(left(mv.val)))
+      throw mv.val
     } else if (_isMVarFull(mv)) {
-      runEff(cb(right(false)))
+      return false
     } else {
       notifyMVarFull(mv, val, right)
-      runEff(cb(right(true)))
+      return true
     }
-    return noncaller
   }
 }
 
-exports._killMVar = function (left, right, nonCanceler, mv, err, cb) {
+exports._killMVar = function (left, mv, err) {
   return function () {
     if (_isMVarKilled(mv)) {
-      runEff(cb(left(mv.val)))
-      return noncaller
+      throw mv.val
     } else {
       var readers = mv.readers, writers = mv.writers, waiters = mv.waiters, mverr = left(err)
       if (waiters > 0) {
@@ -317,8 +315,6 @@ exports._killMVar = function (left, right, nonCanceler, mv, err, cb) {
         mv.writer = undefined
       }
       _setMVarKilled(mv, err)
-      runEff(cb(right(void 0)))
-      return noncaller
     }
   }
 }
