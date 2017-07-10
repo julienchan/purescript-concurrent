@@ -1,18 +1,17 @@
 module Control.Concurrent.MVar
-    ( MVar
-    , withMVar
-    , makeEmptyMVar
-    , makeMVar
-    , putMVar
-    , tryPutMVar
-    , takeMVar
-    , tryTakeMVar
-    , readMVar
-    , swapMVar
-    , modifyMVar
-    , modifyMVar'
-    , killMVar
-    ) where
+  ( MVar
+  , withMVar
+  , makeEmptyMVar
+  , makeMVar
+  , putMVar
+  , tryPutMVar
+  , takeMVar
+  , tryTakeMVar
+  , readMVar
+  , swapMVar
+  , modifyMVar
+  , modifyMVar'
+  , killMVar ) where
 
 import Prelude
 
@@ -40,12 +39,16 @@ withMVar v act = do
     b <- act a `catchError` \e -> putMVar v a *> throwError e
     putMVar v a *> pure b
 
+-- | Create an empty MVar
 makeEmptyMVar :: forall a. IO (MVar a)
 makeEmptyMVar = liftEff _makeEmptyMVar
 
+-- | Create a MVar with an initial value
 makeMVar :: forall a. a -> IO (MVar a)
 makeMVar a = liftEff (_makeMVar a)
 
+-- | Put a value to the MVar, if the MVar is full, it will be queued until it become
+-- | empty
 putMVar :: forall a. MVar a -> a -> IO Unit
 putMVar mv a = makeIO (\cb -> runFn6 _putMVar Left Right nonCanceler mv a cb)
 

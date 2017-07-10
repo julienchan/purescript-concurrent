@@ -302,14 +302,14 @@ exports._killMVar = function (left, mv, err) {
       }
       // readers
       if (readers) {
-        for (var _iterator = readers.iter(), _step, item; !(_step = _iterator.next()).done; ) {
+        for (var _iterator = readers.iter(), _step; !(_step = _iterator.next()).done; ) {
           runEff(_step.value.cb(mverr))
         }
         mv.reader = undefined
       }
       // writers
       if (writers) {
-        for (var _iterator = writers.iter(), _step, item; !(_step = _iterator.next()).done; ) {
+        for (var _iterator = writers.iter(), _step; !(_step = _iterator.next()).done; ) {
           runEff(_step.value.cb(mverr))
         }
         mv.writer = undefined

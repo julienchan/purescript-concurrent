@@ -1,16 +1,16 @@
 module Control.Concurrent.Internal.Types
-    ( IO
-    , ALL
-    , launchIO
-    , unsafeLaunchIO
-    , delay
-    , bracket
-    , attempt
-    , ParIO(..)
-    , makeIO
-    , Canceler(..)
-    , nonCanceler
-    , Thread(..) ) where
+  ( IO
+  , ALL
+  , launchIO
+  , unsafeLaunchIO
+  , delay
+  , bracket
+  , attempt
+  , ParIO(..)
+  , makeIO
+  , Canceler(..)
+  , nonCanceler
+  , Thread(..) ) where
 
 import Prelude
 
@@ -74,7 +74,7 @@ launchIO ft = Fn.runFn6 _launchIO isLeft unsafeFromLeft unsafeFromRight Left Rig
 unsafeLaunchIO :: forall eff a. IO a -> Eff eff (Thread a)
 unsafeLaunchIO ft = unsafeCoerceEff (launchIO ft)
 
-bracket :: forall a b. IO a -> (a -> IO Unit) -> (a -> IO b) -> IO b
+bracket :: forall a b c. IO a -> (a -> IO b) -> (a -> IO c) -> IO c
 bracket acquire release kleisli = Fn.runFn3 _bracket acquire release kleisli
 
 instance functorIO :: Functor IO where
@@ -205,7 +205,7 @@ foreign import _liftEff :: forall eff a. Eff eff a -> IO a
 -- | attempt computation of an IO
 foreign import attempt :: forall a. IO a -> IO (Either Error a)
 
-foreign import _bracket :: forall a b. Fn.Fn3 (IO a) (a -> IO Unit) (a -> IO b) (IO b)
+foreign import _bracket :: forall a b c. Fn.Fn3 (IO a) (a -> IO b) (a -> IO c) (IO c)
 
 foreign import makeIO :: forall eff a. ((Either Error a -> Eff eff Unit) -> Eff eff Canceler) -> IO a
 
