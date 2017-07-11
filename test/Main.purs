@@ -5,7 +5,7 @@ module Test.Main
 import Prelude
 
 import Control.Alt ((<|>))
-import Control.Concurrent.MVar (makeEmptyMVar, putMVar, takeMVar, readMVar)
+import Control.Concurrent.MVar (makeEmptyMVar, putMVar, takeMVar, tryTakeMVar, readMVar, killMVar)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.Exception (Error, EXCEPTION, throwException, error)
@@ -18,8 +18,8 @@ import Control.Monad.IO
 import Control.Parallel (parallel, sequential)
 
 import Data.Either (Either(..), isLeft)
-import Data.Foldable (sum, sequence_)
-import Data.Maybe (Maybe(..))
+import Data.Foldable (sum)
+import Data.Maybe (Maybe(..), isNothing)
 import Data.Traversable (traverse)
 import Data.Time.Duration (Milliseconds(..))
 
@@ -171,7 +171,7 @@ test_bracket = assert "bracket" do
           liftEff (Ref.modifyRef ref (_ <> [ s ]))
           pure s
     t <- forkIO do
-        _ <- delay (Milliseconds 40.0)
+        _ <- delay (Milliseconds 100.0)
         liftEff (Ref.readRef ref)
     _ <- bracket
         (action "foo")
@@ -218,6 +218,26 @@ test_readMVar = timeout (Milliseconds 1000.0) $ assert "readMVar" do
     _ <- forkIO (delay (Milliseconds 10.0) *> putMVar v 42)
     eq <$> readMVar v <*> takeMVar v
 
+test_killMVar :: IO Unit
+test_killMVar = assert "killMVar" do
+    v <- makeEmptyMVar
+    _ <- killMVar v (error "No")
+    isLeft <$> attempt (takeMVar v)
+
+test_tryTakeEmptyMVar :: IO Unit
+test_tryTakeEmptyMVar = timeout (Milliseconds 1000.0) $ assert "tryTakeMVar/empty" do
+    mv <- makeEmptyMVar
+    isNothing <$> tryTakeMVar mv
+
+test_tryTakeFullMVar :: IO Unit
+test_tryTakeFullMVar = timeout (Milliseconds 1000.0) $ assert "tryTakeMVar/full" do
+    mv <- makeEmptyMVar
+    _ <- putMVar mv 43
+    x <- tryTakeMVar mv
+    case x of
+        Nothing -> pure false
+        Just y  -> pure (y == 43)
+
 main :: Eff (all :: ALL) Unit
 main = do
     test_pure
@@ -225,19 +245,21 @@ main = do
     test_attempt
     test_throw
     test_liftEff
-    void $ launchIO $ sequence_
-        [ test_delay
-        , test_fork
-        , test_join
-        , test_join_throw
-        , test_join_throw_sync
-        , test_multi_join
-        , test_makeIO
-        , test_kill
-        , test_bracket
-        , test_parallel
-        , test_parallel_error
-        , test_parallel_choose_success
-        , test_putTakeMVar
-        , test_readMVar
-        ]
+    void $ launchIO do
+        test_delay
+        test_fork
+        test_join
+        test_join_throw
+        test_join_throw_sync
+        test_multi_join
+        test_makeIO
+        test_kill
+        test_bracket
+        test_parallel
+        test_parallel_error
+        test_parallel_choose_success
+        test_putTakeMVar
+        test_readMVar
+        test_killMVar
+        test_tryTakeEmptyMVar
+        test_tryTakeFullMVar
