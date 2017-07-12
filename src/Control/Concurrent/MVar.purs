@@ -1,8 +1,8 @@
 module Control.Concurrent.MVar
   ( MVar
   , withMVar
-  , makeEmptyMVar
-  , makeMVar
+  , newEmptyMVar
+  , newMVar
   , putMVar
   , tryPutMVar
   , takeMVar
@@ -40,12 +40,12 @@ withMVar v act = do
     putMVar v a *> pure b
 
 -- | Create an empty MVar
-makeEmptyMVar :: forall a. IO (MVar a)
-makeEmptyMVar = liftEff _makeEmptyMVar
+newEmptyMVar :: forall a. IO (MVar a)
+newEmptyMVar = liftEff _makeEmptyMVar
 
 -- | Create a MVar with an initial value
-makeMVar :: forall a. a -> IO (MVar a)
-makeMVar a = liftEff (_makeMVar a)
+newMVar :: forall a. a -> IO (MVar a)
+newMVar a = liftEff (_makeMVar a)
 
 -- | Put a value to the MVar, if the MVar is full, it will be queued until it become
 -- | empty

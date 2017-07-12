@@ -5,7 +5,8 @@ module Test.Main
 import Prelude
 
 import Control.Alt ((<|>))
-import Control.Concurrent.MVar (makeEmptyMVar, putMVar, takeMVar, tryTakeMVar, readMVar, killMVar)
+import Control.Concurrent.MVar
+    (newEmptyMVar, newMVar, putMVar, takeMVar, tryTakeMVar, readMVar, killMVar)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.Exception (Error, EXCEPTION, throwException, error)
@@ -29,7 +30,7 @@ type TestEff = Eff (assert :: ASSERT, console :: CONSOLE, exception :: EXCEPTION
 
 timeout :: Milliseconds -> IO Unit -> IO Unit
 timeout ms io = do
-    exn <- makeEmptyMVar
+    exn <- newEmptyMVar
     t1 <- forkIO (delay ms *> putMVar exn (Just "Timed out"))
     t2 <- forkIO (io *> putMVar exn Nothing)
     res <- takeMVar exn
@@ -206,32 +207,37 @@ test_parallel_choose_success = assert "parallel/error multi" do
         parallel (delay (Milliseconds 200.0) $> 50)
     pure (n == 50)
 
+test_newMVar :: IO Unit
+test_newMVar = timeout (Milliseconds 1000.0) $ assert "newMVar" do
+    mv <- newMVar 40
+    eq 40 <$> takeMVar mv
+
 test_putTakeMVar :: IO Unit
 test_putTakeMVar = timeout (Milliseconds 1000.0) $ assert "putTakeMVar" do
-    v <- makeEmptyMVar
+    v <- newEmptyMVar
     _ <- forkIO (delay (Milliseconds 0.0) *> putMVar v 1.0)
     eq 1.0 <$> takeMVar v
 
 test_readMVar :: IO Unit
 test_readMVar = timeout (Milliseconds 1000.0) $ assert "readMVar" do
-    v <- makeEmptyMVar
+    v <- newEmptyMVar
     _ <- forkIO (delay (Milliseconds 10.0) *> putMVar v 42)
     eq <$> readMVar v <*> takeMVar v
 
 test_killMVar :: IO Unit
 test_killMVar = assert "killMVar" do
-    v <- makeEmptyMVar
+    v <- newEmptyMVar
     _ <- killMVar v (error "No")
     isLeft <$> attempt (takeMVar v)
 
 test_tryTakeEmptyMVar :: IO Unit
 test_tryTakeEmptyMVar = timeout (Milliseconds 1000.0) $ assert "tryTakeMVar/empty" do
-    mv <- makeEmptyMVar
+    mv <- newEmptyMVar
     isNothing <$> tryTakeMVar mv
 
 test_tryTakeFullMVar :: IO Unit
 test_tryTakeFullMVar = timeout (Milliseconds 1000.0) $ assert "tryTakeMVar/full" do
-    mv <- makeEmptyMVar
+    mv <- newEmptyMVar
     _ <- putMVar mv 43
     x <- tryTakeMVar mv
     case x of
@@ -258,6 +264,7 @@ main = do
         test_parallel
         test_parallel_error
         test_parallel_choose_success
+        test_newMVar
         test_putTakeMVar
         test_readMVar
         test_killMVar

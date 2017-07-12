@@ -6,20 +6,26 @@ module Control.Monad.IO
   , joinThread
   , onError
   , finally
+  , timeout
   , module ReExport ) where
 
 import Prelude
 
-import Control.Concurrent.Internal.Types (IO, ALL, Thread(..), attempt, bracket, launchIO, unsafeLaunchIO)
+import Control.Concurrent.MVar (newEmptyMVar, takeMVar, putMVar)
+import Control.Concurrent.Internal.Types
+    (IO, ALL, Thread(..), delay, attempt, bracket, launchIO, unsafeLaunchIO)
 import Control.Concurrent.Internal.Types
     ( IO, ParIO, Thread, Canceler(..), ALL, attempt, bracket, delay, launchIO, unsafeLaunchIO
     , makeIO, nonCanceler) as ReExport
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
-import Control.Monad.Eff.Exception (Error)
+import Control.Monad.Eff.Exception (Error, error)
 import Control.Monad.Error.Class (catchError, throwError)
 
 import Data.Either (Either)
+import Data.Maybe (Maybe(..))
+import Data.Time.Duration (Milliseconds)
+
 
 -- | convert an IO action to Eff action by providing a callback when it complete.
 runIO :: forall eff a. (Either Error a -> Eff eff Unit) -> IO a -> Eff (all :: ALL) Unit
@@ -47,3 +53,13 @@ onError io fi = io `catchError` \e -> do
 
 finally :: forall a b. IO a -> IO b -> IO a
 finally io seq = bracket (pure unit) (const seq) (const io)
+
+timeout :: forall a. Milliseconds -> IO a -> IO (Maybe a)
+timeout ms io = do
+    mv <- newEmptyMVar
+    t1 <- forkIO (io >>= putMVar mv <<< Just)
+    t2 <- forkIO (delay ms >>= \_ -> putMVar mv Nothing)
+    x <- takeMVar mv
+    case x of
+        Nothing      -> killThread (error "timeout") t1 *> pure Nothing
+        res@(Just _) -> killThread (error "success") t2 *> pure res
